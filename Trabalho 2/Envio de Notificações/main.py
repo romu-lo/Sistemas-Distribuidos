@@ -5,6 +5,7 @@ import pika
 import sys
 import os
 
+
 def get_email_cancelamento(nome_paciente, nome_fono, data_consulta, hora_consulta):
     return f'''Olá, {nome_paciente}!
 
@@ -55,20 +56,22 @@ Secretária da Clínica FonoIngá
 
 
 def main():
-    connection = pika.BlockingConnection(
+    conexao = pika.BlockingConnection(
         pika.ConnectionParameters(host='localhost'))
-    channel = connection.channel()
+    canal = conexao.channel()
 
-    channel.queue_declare(queue='Consultas')
+    canal.queue_declare(queue='Consultas')
 
     def callback(ch, method, properties, body):
         enviar_email(body)
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
-    channel.basic_consume(
-        queue='Consultas', on_message_callback=callback, auto_ack=True)
+    canal.basic_qos(prefetch_count=1)
+    canal.basic_consume(
+        queue='Consultas', on_message_callback=callback)
 
     print(' Aguardando mensagens. Para sair pressione CTRL+C')
-    channel.start_consuming()
+    canal.start_consuming()
 
 
 def enviar_email(mensagem):
@@ -91,13 +94,16 @@ def enviar_email(mensagem):
     mensagem["Subject"] = f"FonoIngá - Confirmação da Consulta"
 
     if tipo_email == 1:
-        corpo_mensagem = get_email_confirmacao(nome_paciente, nome_fono, data_consulta, hora_consulta)
+        corpo_mensagem = get_email_confirmacao(
+            nome_paciente, nome_fono, data_consulta, hora_consulta)
 
     elif tipo_email == 2:
-        corpo_mensagem = get_email_cancelamento(nome_paciente, nome_fono, data_consulta, hora_consulta)
+        corpo_mensagem = get_email_cancelamento(
+            nome_paciente, nome_fono, data_consulta, hora_consulta)
 
     elif tipo_email == 3:
-        corpo_mensagem = get_email_alteracao(nome_paciente, nome_fono, data_consulta, hora_consulta)
+        corpo_mensagem = get_email_alteracao(
+            nome_paciente, nome_fono, data_consulta, hora_consulta)
 
     mensagem.attach(MIMEText(corpo_mensagem, "plain"))
 
