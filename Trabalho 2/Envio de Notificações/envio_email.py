@@ -6,10 +6,10 @@ import sys
 import os
 
 
-def get_email_cancelamento(nome_paciente, nome_fono, data_consulta, hora_consulta):
-    return f'''Olá, {nome_paciente}!
+def get_email_cancelamento(cpf_paciente):
+    return f'''Olá!
 
-Sua consulta no dia {data_consulta}, às {hora_consulta} com o(a) fonoaudiólogo(a) {nome_fono} foi cancelada.
+A consulta agendada para o CPF {cpf_paciente} foi cancelada.
 
 Se surgir alguma dúvida ou se precisar reagendar, estamos aqui para ajudar. Não hesite em nos contatar.
 
@@ -60,30 +60,42 @@ def main():
         pika.ConnectionParameters(host='localhost'))
     canal = conexao.channel()
 
-    canal.queue_declare(queue='Consultas')
+    canal.exchange_declare(exchange='Consultas', exchange_type='fanout')
+
+    resultado = canal.queue_declare(queue='', exclusive=True)
+    nome_fila = resultado.method.queue
+
+    canal.queue_bind(exchange='Consultas', queue=nome_fila)
 
     def callback(ch, method, properties, body):
         enviar_email(body)
-        ch.basic_ack(delivery_tag=method.delivery_tag)
 
     canal.basic_qos(prefetch_count=1)
     canal.basic_consume(
-        queue='Consultas', on_message_callback=callback)
+        queue=nome_fila, on_message_callback=callback, auto_ack=True)
 
-    print(' Aguardando mensagens. Para sair pressione CTRL+C')
+    print('\nENVIO DE EMAIL\nAguardando mensagens. Para sair pressione CTRL+C')
     canal.start_consuming()
 
 
 def enviar_email(mensagem):
-
     mensagem = eval(mensagem)
 
+    # print(mensagem)
+
     tipo_email = mensagem['id_operacao']
-    nome_paciente = mensagem['nome_paciente']
+
+    if tipo_email == 4 or tipo_email == 5:
+        return {"message": "E-mail não enviado."}
+    
+    cpf_paciente = mensagem['cpf_paciente']
     email_paciente = mensagem['email_paciente']
-    nome_fono = mensagem['nome_fono']
-    data_consulta = mensagem['data_consulta']
-    hora_consulta = mensagem['hora_consulta']
+
+    if tipo_email == 1 or tipo_email == 3:
+        nome_paciente = mensagem['nome_paciente']
+        nome_fono = mensagem['nome_fono']
+        data_consulta = mensagem['data_consulta']
+        hora_consulta = mensagem['hora_consulta']
 
     remetente_email = "fonoinga.fono@gmail.com"
     remetente_senha = "ytxn nckj nbrd aexy"
@@ -98,8 +110,7 @@ def enviar_email(mensagem):
             nome_paciente, nome_fono, data_consulta, hora_consulta)
 
     elif tipo_email == 2:
-        corpo_mensagem = get_email_cancelamento(
-            nome_paciente, nome_fono, data_consulta, hora_consulta)
+        corpo_mensagem = get_email_cancelamento(cpf_paciente)
 
     elif tipo_email == 3:
         corpo_mensagem = get_email_alteracao(
@@ -124,7 +135,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print('Interrompido')
+        print('\nInterrompido\n')
         try:
             sys.exit(0)
         except SystemExit:

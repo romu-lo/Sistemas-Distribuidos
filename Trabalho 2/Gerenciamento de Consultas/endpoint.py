@@ -19,13 +19,17 @@ class Dados(BaseModel):
 async def listar_consultas():
     return consultas.listar_consultas()
 
+@app.get("/consultas_paciente/")
+async def consultas_paciente(cpf_paciente: str):
+    return consultas.consultas_paciente(cpf_paciente)
+
 @app.post("/agendar_consulta/")
 async def agendar_consulta(dados:Dados):
     return consultas.agendar_consulta(dados)
 
 @app.delete("/cancelar_consulta/")
-async def cancelar_consulta(cpf_paciente: str):
-    return consultas.cancelar_consulta(cpf_paciente)
+async def cancelar_consulta(cpf_paciente: str, email_paciente: EmailStr):
+    return consultas.cancelar_consulta(cpf_paciente, email_paciente)
 
 @app.patch("/alterar_consulta/")
 async def alterar_consulta(cpf_paciente: str, dados: Dados):
