@@ -8,7 +8,6 @@ import os
 
 Base = declarative_base()
 
-
 class Consultas_agendadas(Base):
 
     __tablename__ = 'consultas_agendadas'
@@ -41,7 +40,7 @@ class BDConsultas:
         Base = declarative_base()
 
         self.engine = create_engine(
-            'mysql+mysqlconnector://root:admin@localhost:3306/trabalho2sd')
+            'mysql+mysqlconnector://root:root@localhost:3306/trabalhosd')
         Base.metadata.create_all(bind=self.engine)
 
         Session = sessionmaker(bind=self.engine)

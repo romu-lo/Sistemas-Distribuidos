@@ -1,83 +1,116 @@
-from fastapi import FastAPI, HTTPException
-import httpx
-from httpx import AsyncClient
-from typing import List
+from fastapi import FastAPI
+from pydantic import BaseModel, EmailStr
+from datetime import datetime
+import requests
+import random
 
-app = FastAPI()
-
-
-URLS_SERVICOS = [
-    "http://127.0.0.1:8001/",
-    "http://127.0.0.1:8002/",
+URLS_ENDPOINTS = [
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001",
+    "http://127.0.0.1:8002",
 ]
 
-# Função para encaminhar a solicitação para os serviços subjacentes
-async def forward_request(url: str, path: str):
-    async with httpx.AsyncClient() as client:
+PESOS = [2, 1, 1]
+
+SERVICOS = {
+    "listar_consultas": {"url": "/listar_consultas/",
+                         "metodo": requests.get},
+
+    "consultas_paciente": {"url": "/consultas_paciente/",
+                           "metodo": requests.get},
+
+    "agendar_consulta": {"url": "/agendar_consulta/",
+                         "metodo": requests.post},
+
+    "cancelar_consulta": {"url": "/cancelar_consulta/",
+                          "metodo": requests.delete},
+
+    "alterar_consulta": {"url": "/alterar_consulta/",
+                         "metodo": requests.patch}
+}
+
+gateway = FastAPI()
+
+
+class Dados(BaseModel):
+    nome_paciente: str
+    email_paciente: EmailStr
+    cpf_paciente: str
+    convenio: str
+    nome_fono: str
+    data_consulta: datetime
+
+
+def escolher_endpoint() -> tuple[str, list]:
+    lista_endpoints = URLS_ENDPOINTS.copy()
+    pesos = PESOS.copy()
+
+    endpoints_offline = []
+
+    while len(lista_endpoints) > 0:
+        endpoint = random.choices(lista_endpoints, weights=pesos)[0]
+        pesos.pop(lista_endpoints.index(endpoint))
+        lista_endpoints.remove(endpoint)
+
         try:
-            response = await client.get(f"{url}/{path}")
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=500, detail=f"Failed to forward request: {e}")
+            status_endpoint = requests.get(endpoint, timeout=30).status_code
 
-# Endpoint para rota raiz
-@app.get("/")
-async def read_root():
-    return {"message": "Hello World"}
+        except:
+            endpoints_offline.append(endpoint[-4:])
+            continue
 
-# Endpoint para encaminhar a solicitação para os serviços subjacentes com balanceamento de carga
-@app.get("/service/{service_name}")
-async def forward_to_service(service_name: str):
-    try:
-        # Selecionar um serviço aleatório da lista de URLs
-        selected_service = URLS_SERVICOS[hash(service_name) % len(URLS_SERVICOS)]
-        response = await forward_request(selected_service, service_name)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to forward request: {e}")
+        if status_endpoint == 200:
+            return endpoint, endpoints_offline
 
-# Lidar com o caso em que a rota não foi encontrada
-@app.exception_handler(404)
-async def not_found_exception_handler(request, exc):
-    return {"message": "Endpoint not found"}
+    raise Exception("Nenhum endpoint disponível")
 
 
-#######################################################
-#######################################################
-#######################################################
+def encaminhar_solicitacao(servico: dict, parametros: dict = None) -> dict:
+    endpoint, endpoints_ofline = escolher_endpoint()
+    porta_enpoint = endpoint[-4:]
+    endpoint_servico = f"{endpoint}{servico['url']}"
 
-from typing import List
-from fastapi import FastAPI, HTTPException
-from httpx import AsyncClient
+    resposta = servico["metodo"](endpoint_servico, json=parametros)
 
-app = FastAPI()
+    return {"Endpoints Testados": endpoints_ofline,
+            "Endpoint Escolhido": porta_enpoint,
+            "Resposta": resposta.json()}
 
-# Lista de URLs dos serviços disponíveis
-SERVICE_URLS = [
-    "http://localhost:8001",
-    "http://localhost:8002",
-    "http://localhost:8003",
-]
 
-@app.get("/")
-async def read_root():
-    return {"message": "Hello World"}
+@gateway.get("/")
+async def root():
+    return {"message": "API Gateway"}
 
-# Implementação do balanceamento de carga
-async def balance_load(request):
-    async with AsyncClient() as client:
-        for url in URLS_SERVICOS:
-            try:
-                response = await client.get(url + request.url.path)
-                if response.status_code == 200:
-                    return response.json()
-            except Exception as e:
-                print(f"Failed to reach {url}: {e}")
-                continue
-        raise HTTPException(status_code=503, detail="All services are unavailable.")
 
-# Rota para encaminhar solicitações para serviços subjacentes
-@app.get("/api/{path:path}")
-async def forward_to_services(path: str):
-    return await balance_load(request)
+@gateway.get(SERVICOS["listar_consultas"]["url"])
+async def listar_consultas():
+    return encaminhar_solicitacao(SERVICOS["listar_consultas"])
+
+
+@gateway.get(SERVICOS["consultas_paciente"]["url"])
+async def consultas_paciente(cpf_paciente: str):
+    parametros = {"cpf_paciente": cpf_paciente}
+
+    return encaminhar_solicitacao(SERVICOS["consultas_paciente"], parametros)
+
+
+@gateway.post(SERVICOS["agendar_consulta"]["url"])
+async def agendar_consulta(dados: Dados):
+    parametros = {"dados": dados.model_dump_json()}
+
+    return encaminhar_solicitacao(SERVICOS["agendar_consulta"], parametros)
+
+
+@gateway.delete(SERVICOS["cancelar_consulta"]["url"])
+async def cancelar_consulta(cpf_paciente: str, email_paciente: EmailStr):
+    parametros = {"cpf_paciente": cpf_paciente,
+                  "email_paciente": email_paciente}
+
+    return encaminhar_solicitacao(SERVICOS["cancelar_consulta"], parametros)
+
+
+@gateway.patch(SERVICOS["alterar_consulta"]["url"])
+async def alterar_consulta(cpf_paciente: str, dados: Dados):
+    parametros = {"cpf_paciente": cpf_paciente, "dados": dados}
+
+    return encaminhar_solicitacao(SERVICOS["alterar_consulta"], parametros)

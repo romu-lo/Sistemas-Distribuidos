@@ -80,30 +80,33 @@ class Consulta:
 
         cpf_paciente = "".join(re.findall(r'\d', cpf_paciente))
 
-        resposta = self.__publicar({"id_operacao": 5, "cpf_paciente": cpf_paciente})
+        resposta = self.__publicar(
+            {"id_operacao": 5, "cpf_paciente": cpf_paciente})
 
         return resposta
 
-    def agendar_consulta(self, dados: Tipo_Consulta) -> dict:
+    def agendar_consulta(self, dados: str) -> dict:
         self.__resetar_configs_resposta()
+
+        dados = eval(dados)
 
         dic = {
             "id_operacao": 1,
-            "nome_paciente": dados.nome_paciente,
-            "email_paciente": dados.email_paciente,
-            "cpf_paciente": dados.cpf_paciente,
-            "convenio": dados.convenio,
-            "nome_fono": dados.nome_fono,
-            "data_consulta": str(dados.data_consulta.date()),
-            "hora_consulta": str(dados.data_consulta.strftime("%H:%M:%S")),
+            "nome_paciente": dados['nome_paciente'],
+            "email_paciente": dados['email_paciente'],
+            "cpf_paciente": dados['cpf_paciente'],
+            "convenio": dados['convenio'],
+            "nome_fono": dados['nome_fono'],
+            "data_consulta": str(datetime.today().date()),
+            "hora_consulta": datetime.today().strftime("%H:%M:%S"),
             "tipo_email": "confirmacao"
         }
 
-        if not self.__filtro_cpf(dados.cpf_paciente):
+        if not self.__filtro_cpf(dados["cpf_paciente"]):
             return {"status": 400,
                     "error message": "CPF inválido!"}
 
-        dados.cpf_paciente = "".join(re.findall(r'\d', dados.cpf_paciente))
+        dados["cpf_paciente"] = "".join(re.findall(r'\d', dados["cpf_paciente"]))
 
         resposta = self.__publicar(dic)
 
@@ -128,6 +131,8 @@ class Consulta:
 
     def alterar_consulta(self, cpf_paciente: str, dados: Tipo_Consulta):
         self.__resetar_configs_resposta()
+
+        dados = eval(dados)
 
         if not self.__filtro_cpf(cpf_paciente):
             return {"status": 400,
